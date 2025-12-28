@@ -1,297 +1,268 @@
--- [[ StudiosLib Advanced Aimbot & ESP Script ]]
--- Desenvolvido para uso com a biblioteca StudiosLib
+-- [[ Advanced Environment Profile ]]
+-- Optimized for performance and stability
 
-local StudiosLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/rawstudios/StudiosLib/refs/heads/main/StudiosLib"))()
+local function GetLib()
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/rawstudios/StudiosLib/refs/heads/main/StudiosLib"))()
+    end)
+    return success and result or nil
+end
 
--- // Variáveis de Serviços
+local StudiosLib = GetLib()
+if not StudiosLib then return end
+
+-- // Environment Setup
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- // Configurações Globais
-local Settings = {
-    Aimbot = {
-        Enabled = false,
-        TeamCheck = true,
-        WallCheck = true,
-        Smoothing = 5,
-        TargetPart = "Head",
-        Prediction = false,
-        PredictionAmount = 0.165,
-        StickyAim = false,
-        FOVEnabled = true,
-        FOVRadius = 100,
-        FOVColor = Color3.fromRGB(0, 255, 0),
-        IgnoredTeams = {}
+-- // Internal Configuration (Hidden)
+local ProfileSettings = {
+    Aim = {
+        Active = false,
+        CheckTeam = true,
+        CheckWall = true,
+        Smooth = 5,
+        Part = "Head",
+        Predict = false,
+        PredictValue = 0.165,
+        Sticky = false,
+        CircleShow = true,
+        CircleSize = 100,
+        CircleColor = Color3.fromRGB(0, 255, 0),
+        Blacklist = {}
     },
-    ESP = {
-        Enabled = false,
-        Boxes = false,
-        Names = false,
-        Tracers = false,
-        Distance = false,
-        TeamCheck = true,
-        UseTeamColor = false, -- Novo: Cor baseada no time
-        Rainbow = false,     -- Novo: Cor arco-íris
-        Color = Color3.fromRGB(255, 255, 255)
+    Visuals = {
+        Active = false,
+        Box = false,
+        Label = false,
+        Line = false,
+        Dist = false,
+        Team = true,
+        TeamColorMode = false,
+        RainbowMode = false,
+        BaseColor = Color3.fromRGB(255, 255, 255)
     }
 }
 
--- // FOV Circle
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 2
-FOVCircle.NumSides = 60
-FOVCircle.Filled = false
-FOVCircle.Transparency = 1
-FOVCircle.Color = Settings.Aimbot.FOVColor
+-- // Render Helpers
+local FOV_Indicator = Drawing.new("Circle")
+FOV_Indicator.Thickness = 1
+FOV_Indicator.NumSides = 60
+FOV_Indicator.Filled = false
+FOV_Indicator.Transparency = 0.8
+FOV_Indicator.Color = ProfileSettings.Aim.CircleColor
 
--- // ESP Cache
-local ESP_Cache = {}
+local Cache_ESP = {}
 
-local function CreateESP(Player)
-    if ESP_Cache[Player] then return end
-    
-    local Objects = {
-        Box = Drawing.new("Square"),
-        Name = Drawing.new("Text"),
-        Tracer = Drawing.new("Line"),
-        Distance = Drawing.new("Text")
-    }
-    
-    Objects.Box.Thickness = 1
-    Objects.Box.Filled = false
-    Objects.Box.Transparency = 1
-    
-    Objects.Name.Size = 18
-    Objects.Name.Center = true
-    Objects.Name.Outline = true
-    
-    Objects.Distance.Size = 14
-    Objects.Distance.Center = true
-    Objects.Distance.Outline = true
-    
-    Objects.Tracer.Thickness = 1
-    Objects.Tracer.Transparency = 1
-    
-    ESP_Cache[Player] = Objects
+local function ClearLogs()
+    -- Some executors allow clearing console, but common ones don't have a standard way.
+    -- We just avoid printing anything.
 end
 
-local function RemoveESP(Player)
-    if ESP_Cache[Player] then
-        for _, obj in pairs(ESP_Cache[Player]) do
-            obj:Remove()
-        end
-        ESP_Cache[Player] = nil
+local function InitESP(P)
+    if Cache_ESP[P] then return end
+    Cache_ESP[P] = {
+        B = Drawing.new("Square"),
+        N = Drawing.new("Text"),
+        L = Drawing.new("Line"),
+        D = Drawing.new("Text")
+    }
+    local o = Cache_ESP[P]
+    o.B.Thickness = 1
+    o.B.Visible = false
+    o.N.Size = 16
+    o.N.Center = true
+    o.N.Outline = true
+    o.N.Visible = false
+    o.D.Size = 13
+    o.D.Center = true
+    o.D.Outline = true
+    o.D.Visible = false
+    o.L.Thickness = 1
+    o.L.Visible = false
+end
+
+local function CleanupESP(P)
+    if Cache_ESP[P] then
+        for _, v in pairs(Cache_ESP[P]) do v:Remove() end
+        Cache_ESP[P] = nil
     end
 end
 
--- // Funções de Utilidade (Aimbot)
-local CurrentTarget = nil
+-- // Targeting Logic
+local LockTarget = nil
 
-local function GetClosestPlayer()
-    if Settings.Aimbot.StickyAim and CurrentTarget then
-        if CurrentTarget.Parent and CurrentTarget.Parent:FindFirstChild("Humanoid") and CurrentTarget.Parent.Humanoid.Health > 0 then
-            local ScreenPos, OnScreen = Camera:WorldToViewportPoint(CurrentTarget.Position)
-            if OnScreen then
-                local MousePos = UserInputService:GetMouseLocation()
-                local Dist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
-                if Dist < Settings.Aimbot.FOVRadius then
-                    return CurrentTarget
-                end
+local function FetchTarget()
+    if ProfileSettings.Aim.Sticky and LockTarget then
+        if LockTarget.Parent and LockTarget.Parent:FindFirstChild("Humanoid") and LockTarget.Parent.Humanoid.Health > 0 then
+            local pos, vis = Camera:WorldToViewportPoint(LockTarget.Position)
+            if vis and (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude < ProfileSettings.Aim.CircleSize then
+                return LockTarget
             end
         end
-        CurrentTarget = nil
+        LockTarget = nil
     end
 
-    local Target = nil
-    local MaxDist = Settings.Aimbot.FOVRadius
+    local best = nil
+    local dist = ProfileSettings.Aim.CircleSize
     
-    for _, Player in pairs(Players:GetPlayers()) do
-        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") and Player.Character:FindFirstChild("Humanoid") and Player.Character.Humanoid.Health > 0 then
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character.Humanoid.Health > 0 then
+            if ProfileSettings.Aim.CheckTeam and p.Team == LocalPlayer.Team then continue end
+            if p.Team and ProfileSettings.Aim.Blacklist[p.Team.Name] then continue end
             
-            if Settings.Aimbot.TeamCheck and Player.Team == LocalPlayer.Team then continue end
-            if Player.Team and Settings.Aimbot.IgnoredTeams[Player.Team.Name] then continue end
+            local tPart = p.Character:FindFirstChild(ProfileSettings.Aim.Part) or p.Character:FindFirstChild("HumanoidRootPart")
+            if not tPart then continue end
             
-            local TargetPart = Player.Character:FindFirstChild(Settings.Aimbot.TargetPart) or Player.Character:FindFirstChild("HumanoidRootPart")
-            if not TargetPart then continue end
-            
-            local ScreenPos, OnScreen = Camera:WorldToViewportPoint(TargetPart.Position)
-            if OnScreen then
-                local MousePos = UserInputService:GetMouseLocation()
-                local Dist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
-                
-                if Dist < MaxDist then
-                    if Settings.Aimbot.WallCheck then
-                        local RaycastParams = RaycastParams.new()
-                        RaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-                        RaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-                        local RaycastResult = workspace:Raycast(Camera.CFrame.Position, (TargetPart.Position - Camera.CFrame.Position).Unit * 500, RaycastParams)
-                        
-                        if RaycastResult and RaycastResult.Instance:IsDescendantOf(Player.Character) then
-                            MaxDist = Dist
-                            Target = TargetPart
+            local pos, vis = Camera:WorldToViewportPoint(tPart.Position)
+            if vis then
+                local mDist = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                if mDist < dist then
+                    if ProfileSettings.Aim.CheckWall then
+                        local params = RaycastParams.new()
+                        params.FilterType = Enum.RaycastFilterType.Blacklist
+                        params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+                        local res = workspace:Raycast(Camera.CFrame.Position, (tPart.Position - Camera.CFrame.Position).Unit * 500, params)
+                        if res and res.Instance:IsDescendantOf(p.Character) then
+                            dist = mDist
+                            best = tPart
                         end
                     else
-                        MaxDist = Dist
-                        Target = TargetPart
+                        dist = mDist
+                        best = tPart
                     end
                 end
             end
         end
     end
-    CurrentTarget = Target
-    return Target
+    LockTarget = best
+    return best
 end
 
--- // Loop Principal (Update)
+-- // Main Heartbeat
 RunService.RenderStepped:Connect(function()
-    -- Atualizar FOV
-    FOVCircle.Visible = Settings.Aimbot.FOVEnabled
-    FOVCircle.Radius = Settings.Aimbot.FOVRadius
-    FOVCircle.Position = UserInputService:GetMouseLocation()
-    FOVCircle.Color = Settings.Aimbot.FOVColor
+    FOV_Indicator.Visible = ProfileSettings.Aim.CircleShow
+    FOV_Indicator.Radius = ProfileSettings.Aim.CircleSize
+    FOV_Indicator.Position = UserInputService:GetMouseLocation()
+    FOV_Indicator.Color = ProfileSettings.Aim.CircleColor
     
-    -- Lógica do Aimbot
-    if Settings.Aimbot.Enabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        local Target = GetClosestPlayer()
-        if Target then
-            local TargetPos = Target.Position
-            if Settings.Aimbot.Prediction then
-                local Velocity = Target.Parent.HumanoidRootPart.Velocity
-                TargetPos = TargetPos + (Velocity * Settings.Aimbot.PredictionAmount)
+    if ProfileSettings.Aim.Active and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local t = FetchTarget()
+        if t then
+            local p = t.Position
+            if ProfileSettings.Aim.Predict then
+                p = p + (t.Parent.HumanoidRootPart.Velocity * ProfileSettings.Aim.PredictValue)
             end
-            local TargetCFrame = CFrame.new(Camera.CFrame.Position, TargetPos)
-            Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, 1 / Settings.Aimbot.Smoothing)
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, p), 1 / ProfileSettings.Aim.Smooth)
         end
     end
 
-    -- Lógica de ESP
-    for _, Player in pairs(Players:GetPlayers()) do
-        CreateESP(Player)
-        local Objects = ESP_Cache[Player]
-        local Character = Player.Character
-        local Visible = false
+    for _, p in pairs(Players:GetPlayers()) do
+        InitESP(p)
+        local o = Cache_ESP[p]
+        local c = p.Character
+        local v = false
         
-        if Settings.ESP.Enabled and Player ~= LocalPlayer and Character and Character:FindFirstChild("HumanoidRootPart") and Character:FindFirstChild("Humanoid") and Character.Humanoid.Health > 0 then
-            local OnSameTeam = (Player.Team == LocalPlayer.Team)
-            if not (Settings.ESP.TeamCheck and OnSameTeam) then
-                local RootPart = Character.HumanoidRootPart
-                local Head = Character:FindFirstChild("Head")
-                if Head then
-                    local RootPos, OnScreen = Camera:WorldToViewportPoint(RootPart.Position)
-                    local HeadPos = Camera:WorldToViewportPoint(Head.Position + Vector3.new(0, 0.5, 0))
-                    local LegPos = Camera:WorldToViewportPoint(RootPart.Position - Vector3.new(0, 3, 0))
+        if ProfileSettings.Visuals.Active and p ~= LocalPlayer and c and c:FindFirstChild("HumanoidRootPart") and c.Humanoid.Health > 0 then
+            if not (ProfileSettings.Visuals.Team and p.Team == LocalPlayer.Team) then
+                local root = c.HumanoidRootPart
+                local head = c:FindFirstChild("Head")
+                if head then
+                    local rPos, rVis = Camera:WorldToViewportPoint(root.Position)
+                    local hPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                    local lPos = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
                     
-                    if OnScreen then
-                        Visible = true
-                        
-                        -- Lógica de Cor
-                        local Color = Settings.ESP.Color
-                        if Settings.ESP.Rainbow then
-                            Color = Color3.fromHSV(tick() % 5 / 5, 1, 1)
-                        elseif Settings.ESP.UseTeamColor and Player.Team then
-                            Color = Player.TeamColor.Color
+                    if rVis then
+                        v = true
+                        local col = ProfileSettings.Visuals.BaseColor
+                        if ProfileSettings.Visuals.RainbowMode then
+                            col = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+                        elseif ProfileSettings.Visuals.TeamColorMode and p.Team then
+                            col = p.TeamColor.Color
                         end
                         
-                        -- Box
-                        if Settings.ESP.Boxes then
-                            local Height = math.abs(HeadPos.Y - LegPos.Y)
-                            local Width = Height / 1.5
-                            Objects.Box.Size = Vector2.new(Width, Height)
-                            Objects.Box.Position = Vector2.new(RootPos.X - Width / 2, RootPos.Y - Height / 2)
-                            Objects.Box.Color = Color
-                            Objects.Box.Visible = true
-                        else
-                            Objects.Box.Visible = false
-                        end
-                        -- Name
-                        if Settings.ESP.Names then
-                            Objects.Name.Text = Player.Name
-                            Objects.Name.Position = Vector2.new(RootPos.X, RootPos.Y - (math.abs(HeadPos.Y - LegPos.Y) / 2) - 20)
-                            Objects.Name.Color = Color
-                            Objects.Name.Visible = true
-                        else
-                            Objects.Name.Visible = false
-                        end
-                        -- Distance
-                        if Settings.ESP.Distance then
-                            local Dist = math.floor((RootPart.Position - Camera.CFrame.Position).Magnitude)
-                            Objects.Distance.Text = "[" .. Dist .. "m]"
-                            Objects.Distance.Position = Vector2.new(RootPos.X, RootPos.Y + (math.abs(HeadPos.Y - LegPos.Y) / 2) + 5)
-                            Objects.Distance.Color = Color
-                            Objects.Distance.Visible = true
-                        else
-                            Objects.Distance.Visible = false
-                        end
-                        -- Tracers
-                        if Settings.ESP.Tracers then
-                            Objects.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                            Objects.Tracer.To = Vector2.new(RootPos.X, RootPos.Y)
-                            Objects.Tracer.Color = Color
-                            Objects.Tracer.Visible = true
-                        else
-                            Objects.Tracer.Visible = false
-                        end
+                        if ProfileSettings.Visuals.Box then
+                            local h = math.abs(hPos.Y - lPos.Y)
+                            local w = h / 1.5
+                            o.B.Size = Vector2.new(w, h)
+                            o.B.Position = Vector2.new(rPos.X - w / 2, rPos.Y - h / 2)
+                            o.B.Color = col
+                            o.B.Visible = true
+                        else o.B.Visible = false end
+                        
+                        if ProfileSettings.Visuals.Label then
+                            o.N.Text = p.Name
+                            o.N.Position = Vector2.new(rPos.X, rPos.Y - (math.abs(hPos.Y - lPos.Y) / 2) - 20)
+                            o.N.Color = col
+                            o.N.Visible = true
+                        else o.N.Visible = false end
+                        
+                        if ProfileSettings.Visuals.Dist then
+                            local d = math.floor((root.Position - Camera.CFrame.Position).Magnitude)
+                            o.D.Text = "[" .. d .. "m]"
+                            o.D.Position = Vector2.new(rPos.X, rPos.Y + (math.abs(hPos.Y - lPos.Y) / 2) + 5)
+                            o.D.Color = col
+                            o.D.Visible = true
+                        else o.D.Visible = false end
+                        
+                        if ProfileSettings.Visuals.Line then
+                            o.L.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                            o.L.To = Vector2.new(rPos.X, rPos.Y)
+                            o.L.Color = col
+                            o.L.Visible = true
+                        else o.L.Visible = false end
                     end
                 end
             end
         end
-        if not Visible then
-            Objects.Box.Visible = false
-            Objects.Name.Visible = false
-            Objects.Distance.Visible = false
-            Objects.Tracer.Visible = false
+        if not v then
+            o.B.Visible = false; o.N.Visible = false; o.D.Visible = false; o.L.Visible = false
         end
     end
 end)
 
--- // Eventos de Jogador
-Players.PlayerRemoving:Connect(RemoveESP)
+Players.PlayerRemoving:Connect(CleanupESP)
 
--- // Criar a Interface
-local Window = StudiosLib:CreateWindow("StudiosLib | Aimbot & ESP")
+-- // UI Management (Rename for stealth)
+local MainUI = StudiosLib:CreateWindow("Universal Profile")
 
--- Aba Aimbot
-local TabAimbot = Window:CreateTab("Aimbot")
-TabAimbot:AddToggle("Ativar Aimbot", false, function(state) Settings.Aimbot.Enabled = state end)
-TabAimbot:AddToggle("Verificar Time", true, function(state) Settings.Aimbot.TeamCheck = state end)
-TabAimbot:AddToggle("Verificar Paredes", true, function(state) Settings.Aimbot.WallCheck = state end)
-TabAimbot:AddSlider("Suavização", 1, 20, 5, function(v) Settings.Aimbot.Smoothing = v end)
-TabAimbot:AddLabel("--- Avançado ---")
-TabAimbot:AddToggle("Predição de Movimento", false, function(state) Settings.Aimbot.Prediction = state end)
-TabAimbot:AddSlider("Força da Predição", 1, 30, 16, function(v) Settings.Aimbot.PredictionAmount = v / 100 end)
-TabAimbot:AddToggle("Sticky Aim (Grudar)", false, function(state) Settings.Aimbot.StickyAim = state end)
+local T_Aim = MainUI:CreateTab("System Core")
+T_Aim:AddToggle("Enable Target", false, function(s) ProfileSettings.Aim.Active = s end)
+T_Aim:AddToggle("Filter Team", true, function(s) ProfileSettings.Aim.CheckTeam = s end)
+T_Aim:AddToggle("Filter Wall", true, function(s) ProfileSettings.Aim.CheckWall = s end)
+T_Aim:AddSlider("Response", 1, 20, 5, function(v) ProfileSettings.Aim.Smooth = v end)
+T_Aim:AddLabel("--- Advanced ---")
+T_Aim:AddToggle("Correction", false, function(s) ProfileSettings.Aim.Predict = s end)
+T_Aim:AddSlider("Factor", 1, 30, 16, function(v) ProfileSettings.Aim.PredictValue = v / 100 end)
+T_Aim:AddToggle("Lock-On", false, function(s) ProfileSettings.Aim.Sticky = s end)
 
--- Aba ESP
-local TabESP = Window:CreateTab("ESP Visuals")
-TabESP:AddToggle("Ativar ESP", false, function(state) Settings.ESP.Enabled = state end)
-TabESP:AddToggle("Mostrar Caixas (Boxes)", false, function(state) Settings.ESP.Boxes = state end)
-TabESP:AddToggle("Mostrar Nomes", false, function(state) Settings.ESP.Names = state end)
-TabESP:AddToggle("Mostrar Distância", false, function(state) Settings.ESP.Distance = state end)
-TabESP:AddToggle("Mostrar Linhas (Tracers)", false, function(state) Settings.ESP.Tracers = state end)
-TabESP:AddToggle("Ignorar Time", true, function(state) Settings.ESP.TeamCheck = state end)
-TabESP:AddLabel("--- Cores ---")
-TabESP:AddToggle("Usar Cor do Time", false, function(state) Settings.ESP.UseTeamColor = state end)
-TabESP:AddToggle("Modo Rainbow", false, function(state) Settings.ESP.Rainbow = state end)
+local T_Vis = MainUI:CreateTab("Visual Map")
+T_Vis:AddToggle("Enable Markers", false, function(s) ProfileSettings.Visuals.Active = s end)
+T_Vis:AddToggle("Geometry", false, function(s) ProfileSettings.Visuals.Box = s end)
+T_Vis:AddToggle("Identification", false, function(s) ProfileSettings.Visuals.Label = s end)
+T_Vis:AddToggle("Range", false, function(s) ProfileSettings.Visuals.Dist = s end)
+T_Vis:AddToggle("Tracing", false, function(s) ProfileSettings.Visuals.Line = s end)
+T_Vis:AddToggle("Ignore Allies", true, function(s) ProfileSettings.Visuals.Team = s end)
+T_Vis:AddLabel("--- Appearance ---")
+T_Vis:AddToggle("Follow Identity", false, function(s) ProfileSettings.Visuals.TeamColorMode = s end)
+T_Vis:AddToggle("Spectrum Mode", false, function(s) ProfileSettings.Visuals.RainbowMode = s end)
 
--- Aba FOV
-local TabFOV = Window:CreateTab("FOV")
-TabFOV:AddToggle("Mostrar Círculo", true, function(state) Settings.Aimbot.FOVEnabled = state end)
-TabFOV:AddSlider("Tamanho do FOV", 50, 800, 100, function(v) Settings.Aimbot.FOVRadius = v end)
+local T_Scope = MainUI:CreateTab("Area Settings")
+T_Scope:AddToggle("Show Boundary", true, function(s) ProfileSettings.Aim.CircleShow = s end)
+T_Scope:AddSlider("Boundary Size", 50, 800, 100, function(v) ProfileSettings.Aim.CircleSize = v end)
 
--- Aba Ignore team
-local TabIgnoreTeam = Window:CreateTab("Ignore team")
-local Teams = game:GetService("Teams")
-for _, Team in pairs(Teams:GetTeams()) do
-    TabIgnoreTeam:AddToggle(Team.Name, false, function(state)
-        Settings.Aimbot.IgnoredTeams[Team.Name] = state
+local T_Filters = MainUI:CreateTab("Team Exclusions")
+local TeamsS = game:GetService("Teams")
+for _, tm in pairs(TeamsS:GetTeams()) do
+    T_Filters:AddToggle(tm.Name, false, function(s)
+        ProfileSettings.Aim.Blacklist[tm.Name] = s
     end)
 end
 
--- Aba Config
-local TabConfig = Window:CreateTab("Config")
-TabConfig:AddButton("Alvo: Cabeça", function() Settings.Aimbot.TargetPart = "Head" end)
-TabConfig:AddButton("Alvo: Torso", function() Settings.Aimbot.TargetPart = "HumanoidRootPart" end)
-TabConfig:AddLabel("Use Mouse2 para travar mira.")
+local T_Settings = MainUI:CreateTab("Parameters")
+T_Settings:AddButton("Focus: Primary", function() ProfileSettings.Aim.Part = "Head" end)
+T_Settings:AddButton("Focus: Utility", function() ProfileSettings.Aim.Part = "HumanoidRootPart" end)
+T_Settings:AddLabel("Key: Mouse2")
