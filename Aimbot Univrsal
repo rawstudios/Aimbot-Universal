@@ -1,5 +1,5 @@
--- [[ Advanced Environment Profile ]]
--- Optimized for performance and stability
+-- [[ Script Avançado - Universal Hub ]]
+-- Otimizado para performance, estabilidade e discreção
 
 local function GetLib()
     local success, result = pcall(function()
@@ -11,14 +11,14 @@ end
 local StudiosLib = GetLib()
 if not StudiosLib then return end
 
--- // Environment Setup
+-- // Configurações de Ambiente
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- // Internal Configuration (Hidden)
+-- // Configurações Internas (Discretas)
 local ProfileSettings = {
     Aim = {
         Active = false,
@@ -47,7 +47,7 @@ local ProfileSettings = {
     }
 }
 
--- // Render Helpers
+-- // Ajudantes de Renderização
 local FOV_Indicator = Drawing.new("Circle")
 FOV_Indicator.Thickness = 1
 FOV_Indicator.NumSides = 60
@@ -56,11 +56,6 @@ FOV_Indicator.Transparency = 0.8
 FOV_Indicator.Color = ProfileSettings.Aim.CircleColor
 
 local Cache_ESP = {}
-
-local function ClearLogs()
-    -- Some executors allow clearing console, but common ones don't have a standard way.
-    -- We just avoid printing anything.
-end
 
 local function InitESP(P)
     if Cache_ESP[P] then return end
@@ -92,7 +87,7 @@ local function CleanupESP(P)
     end
 end
 
--- // Targeting Logic
+-- // Lógica de Mira
 local LockTarget = nil
 
 local function FetchTarget()
@@ -142,7 +137,7 @@ local function FetchTarget()
     return best
 end
 
--- // Main Heartbeat
+-- // Loop Principal
 RunService.RenderStepped:Connect(function()
     FOV_Indicator.Visible = ProfileSettings.Aim.CircleShow
     FOV_Indicator.Radius = ProfileSettings.Aim.CircleSize
@@ -226,35 +221,35 @@ end)
 
 Players.PlayerRemoving:Connect(CleanupESP)
 
--- // UI Management (Rename for stealth)
-local MainUI = StudiosLib:CreateWindow("Universal Profile")
+-- // Gerenciamento da UI (Idiomas e Stealth)
+local MainUI = StudiosLib:CreateWindow("StudiosLib | Hub Universal")
 
-local T_Aim = MainUI:CreateTab("System Core")
-T_Aim:AddToggle("Enable Target", false, function(s) ProfileSettings.Aim.Active = s end)
-T_Aim:AddToggle("Filter Team", true, function(s) ProfileSettings.Aim.CheckTeam = s end)
-T_Aim:AddToggle("Filter Wall", true, function(s) ProfileSettings.Aim.CheckWall = s end)
-T_Aim:AddSlider("Response", 1, 20, 5, function(v) ProfileSettings.Aim.Smooth = v end)
-T_Aim:AddLabel("--- Advanced ---")
-T_Aim:AddToggle("Correction", false, function(s) ProfileSettings.Aim.Predict = s end)
-T_Aim:AddSlider("Factor", 1, 30, 16, function(v) ProfileSettings.Aim.PredictValue = v / 100 end)
-T_Aim:AddToggle("Lock-On", false, function(s) ProfileSettings.Aim.Sticky = s end)
+local T_Aim = MainUI:CreateTab("Principal")
+T_Aim:AddToggle("Ativar Mira (Aimbot)", false, function(s) ProfileSettings.Aim.Active = s end)
+T_Aim:AddToggle("Verificar Time", true, function(s) ProfileSettings.Aim.CheckTeam = s end)
+T_Aim:AddToggle("Verificar Parede", true, function(s) ProfileSettings.Aim.CheckWall = s end)
+T_Aim:AddSlider("Suavização", 1, 20, 5, function(v) ProfileSettings.Aim.Smooth = v end)
+T_Aim:AddLabel("--- Avançado ---")
+T_Aim:AddToggle("Predição", false, function(s) ProfileSettings.Aim.Predict = s end)
+T_Aim:AddSlider("Fator de Predição", 1, 30, 16, function(v) ProfileSettings.Aim.PredictValue = v / 100 end)
+T_Aim:AddToggle("Travar Alvo (Sticky)", false, function(s) ProfileSettings.Aim.Sticky = s end)
 
-local T_Vis = MainUI:CreateTab("Visual Map")
-T_Vis:AddToggle("Enable Markers", false, function(s) ProfileSettings.Visuals.Active = s end)
-T_Vis:AddToggle("Geometry", false, function(s) ProfileSettings.Visuals.Box = s end)
-T_Vis:AddToggle("Identification", false, function(s) ProfileSettings.Visuals.Label = s end)
-T_Vis:AddToggle("Range", false, function(s) ProfileSettings.Visuals.Dist = s end)
-T_Vis:AddToggle("Tracing", false, function(s) ProfileSettings.Visuals.Line = s end)
-T_Vis:AddToggle("Ignore Allies", true, function(s) ProfileSettings.Visuals.Team = s end)
-T_Vis:AddLabel("--- Appearance ---")
-T_Vis:AddToggle("Follow Identity", false, function(s) ProfileSettings.Visuals.TeamColorMode = s end)
-T_Vis:AddToggle("Spectrum Mode", false, function(s) ProfileSettings.Visuals.RainbowMode = s end)
+local T_Vis = MainUI:CreateTab("Visuais")
+T_Vis:AddToggle("Ativar ESP", false, function(s) ProfileSettings.Visuals.Active = s end)
+T_Vis:AddToggle("Caixas (Boxes)", false, function(s) ProfileSettings.Visuals.Box = s end)
+T_Vis:AddToggle("Nomes", false, function(s) ProfileSettings.Visuals.Label = s end)
+T_Vis:AddToggle("Distância", false, function(s) ProfileSettings.Visuals.Dist = s end)
+T_Vis:AddToggle("Linhas (Tracers)", false, function(s) ProfileSettings.Visuals.Line = s end)
+T_Vis:AddToggle("Ignorar Aliados", true, function(s) ProfileSettings.Visuals.Team = s end)
+T_Vis:AddLabel("--- Aparência ---")
+T_Vis:AddToggle("Usar Cor do Time", false, function(s) ProfileSettings.Visuals.TeamColorMode = s end)
+T_Vis:AddToggle("Modo Arco-Íris", false, function(s) ProfileSettings.Visuals.RainbowMode = s end)
 
-local T_Scope = MainUI:CreateTab("Area Settings")
-T_Scope:AddToggle("Show Boundary", true, function(s) ProfileSettings.Aim.CircleShow = s end)
-T_Scope:AddSlider("Boundary Size", 50, 800, 100, function(v) ProfileSettings.Aim.CircleSize = v end)
+local T_Scope = MainUI:CreateTab("FOV")
+T_Scope:AddToggle("Mostrar Círculo", true, function(s) ProfileSettings.Aim.CircleShow = s end)
+T_Scope:AddSlider("Tamanho do Círculo", 50, 800, 100, function(v) ProfileSettings.Aim.CircleSize = v end)
 
-local T_Filters = MainUI:CreateTab("Team Exclusions")
+local T_Filters = MainUI:CreateTab("Ignorar Times")
 local TeamsS = game:GetService("Teams")
 for _, tm in pairs(TeamsS:GetTeams()) do
     T_Filters:AddToggle(tm.Name, false, function(s)
@@ -262,7 +257,23 @@ for _, tm in pairs(TeamsS:GetTeams()) do
     end)
 end
 
-local T_Settings = MainUI:CreateTab("Parameters")
-T_Settings:AddButton("Focus: Primary", function() ProfileSettings.Aim.Part = "Head" end)
-T_Settings:AddButton("Focus: Utility", function() ProfileSettings.Aim.Part = "HumanoidRootPart" end)
-T_Settings:AddLabel("Key: Mouse2")
+local T_Settings = MainUI:CreateTab("Configurações")
+T_Settings:AddButton("Alvo: Cabeça", function() ProfileSettings.Aim.Part = "Head" end)
+T_Settings:AddButton("Alvo: Tronco", function() ProfileSettings.Aim.Part = "HumanoidRootPart" end)
+T_Settings:AddLabel("Atalho: Mouse2 (Botão Direito)")
+
+local T_Info = MainUI:CreateTab("Informações")
+T_Info:AddLabel("--- [ PT-BR ] ---")
+T_Info:AddLabel("Aimbot: Mira automaticamente nos alvos.")
+T_Info:AddLabel("Suavização: Deixa o movimento da mira mais natural.")
+T_Info:AddLabel("Predição: Mira onde o alvo vai estar (pela velocidade).")
+T_Info:AddLabel("Sticky: Não troca de alvo até ele morrer ou sumir.")
+T_Info:AddLabel("ESP: Mostra jogadores através das paredes.")
+T_Info:AddLabel("Ignorar Times: Escolha times específicos para não mirar.")
+T_Info:AddLabel("--- [ EN ] ---")
+T_Info:AddLabel("Aimbot: Automatically aims at targets.")
+T_Info:AddLabel("Smoothness: Makes aiming motion look more natural.")
+T_Info:AddLabel("Prediction: Aims where the target will be (by velocity).")
+T_Info:AddLabel("Sticky: Stays on target until they die or disappear.")
+T_Info:AddLabel("ESP: Shows players through walls.")
+T_Info:AddLabel("Ignore Teams: Select specific teams to not aim at.")
