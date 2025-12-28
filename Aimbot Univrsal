@@ -1,0 +1,297 @@
+-- [[ StudiosLib Advanced Aimbot & ESP Script ]]
+-- Desenvolvido para uso com a biblioteca StudiosLib
+
+local StudiosLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/rawstudios/StudiosLib/refs/heads/main/StudiosLib"))()
+
+-- // Variáveis de Serviços
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- // Configurações Globais
+local Settings = {
+    Aimbot = {
+        Enabled = false,
+        TeamCheck = true,
+        WallCheck = true,
+        Smoothing = 5,
+        TargetPart = "Head",
+        Prediction = false,
+        PredictionAmount = 0.165,
+        StickyAim = false,
+        FOVEnabled = true,
+        FOVRadius = 100,
+        FOVColor = Color3.fromRGB(0, 255, 0),
+        IgnoredTeams = {}
+    },
+    ESP = {
+        Enabled = false,
+        Boxes = false,
+        Names = false,
+        Tracers = false,
+        Distance = false,
+        TeamCheck = true,
+        UseTeamColor = false, -- Novo: Cor baseada no time
+        Rainbow = false,     -- Novo: Cor arco-íris
+        Color = Color3.fromRGB(255, 255, 255)
+    }
+}
+
+-- // FOV Circle
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 2
+FOVCircle.NumSides = 60
+FOVCircle.Filled = false
+FOVCircle.Transparency = 1
+FOVCircle.Color = Settings.Aimbot.FOVColor
+
+-- // ESP Cache
+local ESP_Cache = {}
+
+local function CreateESP(Player)
+    if ESP_Cache[Player] then return end
+    
+    local Objects = {
+        Box = Drawing.new("Square"),
+        Name = Drawing.new("Text"),
+        Tracer = Drawing.new("Line"),
+        Distance = Drawing.new("Text")
+    }
+    
+    Objects.Box.Thickness = 1
+    Objects.Box.Filled = false
+    Objects.Box.Transparency = 1
+    
+    Objects.Name.Size = 18
+    Objects.Name.Center = true
+    Objects.Name.Outline = true
+    
+    Objects.Distance.Size = 14
+    Objects.Distance.Center = true
+    Objects.Distance.Outline = true
+    
+    Objects.Tracer.Thickness = 1
+    Objects.Tracer.Transparency = 1
+    
+    ESP_Cache[Player] = Objects
+end
+
+local function RemoveESP(Player)
+    if ESP_Cache[Player] then
+        for _, obj in pairs(ESP_Cache[Player]) do
+            obj:Remove()
+        end
+        ESP_Cache[Player] = nil
+    end
+end
+
+-- // Funções de Utilidade (Aimbot)
+local CurrentTarget = nil
+
+local function GetClosestPlayer()
+    if Settings.Aimbot.StickyAim and CurrentTarget then
+        if CurrentTarget.Parent and CurrentTarget.Parent:FindFirstChild("Humanoid") and CurrentTarget.Parent.Humanoid.Health > 0 then
+            local ScreenPos, OnScreen = Camera:WorldToViewportPoint(CurrentTarget.Position)
+            if OnScreen then
+                local MousePos = UserInputService:GetMouseLocation()
+                local Dist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
+                if Dist < Settings.Aimbot.FOVRadius then
+                    return CurrentTarget
+                end
+            end
+        end
+        CurrentTarget = nil
+    end
+
+    local Target = nil
+    local MaxDist = Settings.Aimbot.FOVRadius
+    
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") and Player.Character:FindFirstChild("Humanoid") and Player.Character.Humanoid.Health > 0 then
+            
+            if Settings.Aimbot.TeamCheck and Player.Team == LocalPlayer.Team then continue end
+            if Player.Team and Settings.Aimbot.IgnoredTeams[Player.Team.Name] then continue end
+            
+            local TargetPart = Player.Character:FindFirstChild(Settings.Aimbot.TargetPart) or Player.Character:FindFirstChild("HumanoidRootPart")
+            if not TargetPart then continue end
+            
+            local ScreenPos, OnScreen = Camera:WorldToViewportPoint(TargetPart.Position)
+            if OnScreen then
+                local MousePos = UserInputService:GetMouseLocation()
+                local Dist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
+                
+                if Dist < MaxDist then
+                    if Settings.Aimbot.WallCheck then
+                        local RaycastParams = RaycastParams.new()
+                        RaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+                        RaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+                        local RaycastResult = workspace:Raycast(Camera.CFrame.Position, (TargetPart.Position - Camera.CFrame.Position).Unit * 500, RaycastParams)
+                        
+                        if RaycastResult and RaycastResult.Instance:IsDescendantOf(Player.Character) then
+                            MaxDist = Dist
+                            Target = TargetPart
+                        end
+                    else
+                        MaxDist = Dist
+                        Target = TargetPart
+                    end
+                end
+            end
+        end
+    end
+    CurrentTarget = Target
+    return Target
+end
+
+-- // Loop Principal (Update)
+RunService.RenderStepped:Connect(function()
+    -- Atualizar FOV
+    FOVCircle.Visible = Settings.Aimbot.FOVEnabled
+    FOVCircle.Radius = Settings.Aimbot.FOVRadius
+    FOVCircle.Position = UserInputService:GetMouseLocation()
+    FOVCircle.Color = Settings.Aimbot.FOVColor
+    
+    -- Lógica do Aimbot
+    if Settings.Aimbot.Enabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local Target = GetClosestPlayer()
+        if Target then
+            local TargetPos = Target.Position
+            if Settings.Aimbot.Prediction then
+                local Velocity = Target.Parent.HumanoidRootPart.Velocity
+                TargetPos = TargetPos + (Velocity * Settings.Aimbot.PredictionAmount)
+            end
+            local TargetCFrame = CFrame.new(Camera.CFrame.Position, TargetPos)
+            Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, 1 / Settings.Aimbot.Smoothing)
+        end
+    end
+
+    -- Lógica de ESP
+    for _, Player in pairs(Players:GetPlayers()) do
+        CreateESP(Player)
+        local Objects = ESP_Cache[Player]
+        local Character = Player.Character
+        local Visible = false
+        
+        if Settings.ESP.Enabled and Player ~= LocalPlayer and Character and Character:FindFirstChild("HumanoidRootPart") and Character:FindFirstChild("Humanoid") and Character.Humanoid.Health > 0 then
+            local OnSameTeam = (Player.Team == LocalPlayer.Team)
+            if not (Settings.ESP.TeamCheck and OnSameTeam) then
+                local RootPart = Character.HumanoidRootPart
+                local Head = Character:FindFirstChild("Head")
+                if Head then
+                    local RootPos, OnScreen = Camera:WorldToViewportPoint(RootPart.Position)
+                    local HeadPos = Camera:WorldToViewportPoint(Head.Position + Vector3.new(0, 0.5, 0))
+                    local LegPos = Camera:WorldToViewportPoint(RootPart.Position - Vector3.new(0, 3, 0))
+                    
+                    if OnScreen then
+                        Visible = true
+                        
+                        -- Lógica de Cor
+                        local Color = Settings.ESP.Color
+                        if Settings.ESP.Rainbow then
+                            Color = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+                        elseif Settings.ESP.UseTeamColor and Player.Team then
+                            Color = Player.TeamColor.Color
+                        end
+                        
+                        -- Box
+                        if Settings.ESP.Boxes then
+                            local Height = math.abs(HeadPos.Y - LegPos.Y)
+                            local Width = Height / 1.5
+                            Objects.Box.Size = Vector2.new(Width, Height)
+                            Objects.Box.Position = Vector2.new(RootPos.X - Width / 2, RootPos.Y - Height / 2)
+                            Objects.Box.Color = Color
+                            Objects.Box.Visible = true
+                        else
+                            Objects.Box.Visible = false
+                        end
+                        -- Name
+                        if Settings.ESP.Names then
+                            Objects.Name.Text = Player.Name
+                            Objects.Name.Position = Vector2.new(RootPos.X, RootPos.Y - (math.abs(HeadPos.Y - LegPos.Y) / 2) - 20)
+                            Objects.Name.Color = Color
+                            Objects.Name.Visible = true
+                        else
+                            Objects.Name.Visible = false
+                        end
+                        -- Distance
+                        if Settings.ESP.Distance then
+                            local Dist = math.floor((RootPart.Position - Camera.CFrame.Position).Magnitude)
+                            Objects.Distance.Text = "[" .. Dist .. "m]"
+                            Objects.Distance.Position = Vector2.new(RootPos.X, RootPos.Y + (math.abs(HeadPos.Y - LegPos.Y) / 2) + 5)
+                            Objects.Distance.Color = Color
+                            Objects.Distance.Visible = true
+                        else
+                            Objects.Distance.Visible = false
+                        end
+                        -- Tracers
+                        if Settings.ESP.Tracers then
+                            Objects.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                            Objects.Tracer.To = Vector2.new(RootPos.X, RootPos.Y)
+                            Objects.Tracer.Color = Color
+                            Objects.Tracer.Visible = true
+                        else
+                            Objects.Tracer.Visible = false
+                        end
+                    end
+                end
+            end
+        end
+        if not Visible then
+            Objects.Box.Visible = false
+            Objects.Name.Visible = false
+            Objects.Distance.Visible = false
+            Objects.Tracer.Visible = false
+        end
+    end
+end)
+
+-- // Eventos de Jogador
+Players.PlayerRemoving:Connect(RemoveESP)
+
+-- // Criar a Interface
+local Window = StudiosLib:CreateWindow("StudiosLib | Aimbot & ESP")
+
+-- Aba Aimbot
+local TabAimbot = Window:CreateTab("Aimbot")
+TabAimbot:AddToggle("Ativar Aimbot", false, function(state) Settings.Aimbot.Enabled = state end)
+TabAimbot:AddToggle("Verificar Time", true, function(state) Settings.Aimbot.TeamCheck = state end)
+TabAimbot:AddToggle("Verificar Paredes", true, function(state) Settings.Aimbot.WallCheck = state end)
+TabAimbot:AddSlider("Suavização", 1, 20, 5, function(v) Settings.Aimbot.Smoothing = v end)
+TabAimbot:AddLabel("--- Avançado ---")
+TabAimbot:AddToggle("Predição de Movimento", false, function(state) Settings.Aimbot.Prediction = state end)
+TabAimbot:AddSlider("Força da Predição", 1, 30, 16, function(v) Settings.Aimbot.PredictionAmount = v / 100 end)
+TabAimbot:AddToggle("Sticky Aim (Grudar)", false, function(state) Settings.Aimbot.StickyAim = state end)
+
+-- Aba ESP
+local TabESP = Window:CreateTab("ESP Visuals")
+TabESP:AddToggle("Ativar ESP", false, function(state) Settings.ESP.Enabled = state end)
+TabESP:AddToggle("Mostrar Caixas (Boxes)", false, function(state) Settings.ESP.Boxes = state end)
+TabESP:AddToggle("Mostrar Nomes", false, function(state) Settings.ESP.Names = state end)
+TabESP:AddToggle("Mostrar Distância", false, function(state) Settings.ESP.Distance = state end)
+TabESP:AddToggle("Mostrar Linhas (Tracers)", false, function(state) Settings.ESP.Tracers = state end)
+TabESP:AddToggle("Ignorar Time", true, function(state) Settings.ESP.TeamCheck = state end)
+TabESP:AddLabel("--- Cores ---")
+TabESP:AddToggle("Usar Cor do Time", false, function(state) Settings.ESP.UseTeamColor = state end)
+TabESP:AddToggle("Modo Rainbow", false, function(state) Settings.ESP.Rainbow = state end)
+
+-- Aba FOV
+local TabFOV = Window:CreateTab("FOV")
+TabFOV:AddToggle("Mostrar Círculo", true, function(state) Settings.Aimbot.FOVEnabled = state end)
+TabFOV:AddSlider("Tamanho do FOV", 50, 800, 100, function(v) Settings.Aimbot.FOVRadius = v end)
+
+-- Aba Ignore team
+local TabIgnoreTeam = Window:CreateTab("Ignore team")
+local Teams = game:GetService("Teams")
+for _, Team in pairs(Teams:GetTeams()) do
+    TabIgnoreTeam:AddToggle(Team.Name, false, function(state)
+        Settings.Aimbot.IgnoredTeams[Team.Name] = state
+    end)
+end
+
+-- Aba Config
+local TabConfig = Window:CreateTab("Config")
+TabConfig:AddButton("Alvo: Cabeça", function() Settings.Aimbot.TargetPart = "Head" end)
+TabConfig:AddButton("Alvo: Torso", function() Settings.Aimbot.TargetPart = "HumanoidRootPart" end)
+TabConfig:AddLabel("Use Mouse2 para travar mira.")
