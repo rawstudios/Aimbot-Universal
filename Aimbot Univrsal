@@ -258,8 +258,8 @@ for _, tm in pairs(TeamsS:GetTeams()) do
 end
 
 local T_Settings = MainUI:CreateTab("Configurações")
-T_Settings:AddButton("Alvo: Cabeça", function() ProfileSettings.Aim.Part = "Head" end)
-T_Settings:AddButton("Alvo: Tronco", function() ProfileSettings.Aim.Part = "HumanoidRootPart" end)
+T_Settings:AddSimpleButton("Alvo: Cabeça", function() ProfileSettings.Aim.Part = "Head" end)
+T_Settings:AddSimpleButton("Alvo: Tronco", function() ProfileSettings.Aim.Part = "HumanoidRootPart" end)
 T_Settings:AddLabel("Atalho: Mouse2 (Botão Direito)")
 
 local T_Info = MainUI:CreateTab("Informações")
