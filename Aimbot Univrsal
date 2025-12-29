@@ -3,6 +3,10 @@
 
 local function GetLib()
     local success, result = pcall(function()
+        -- Prioriza o arquivo local com as atualizações de UI
+        if isfile and isfile("Studioslib.lua") then
+            return loadstring(readfile("Studioslib.lua"))()
+        end
         return loadstring(game:HttpGet("https://raw.githubusercontent.com/rawstudios/StudiosLib/refs/heads/main/StudiosLib"))()
     end)
     return success and result or nil
@@ -222,37 +226,38 @@ end)
 Players.PlayerRemoving:Connect(CleanupESP)
 
 -- // Gerenciamento da UI (Idiomas e Stealth)
+StudiosLib:SetConfigFile("UniversalHub_Settings") -- Nome do arquivo de save
 local MainUI = StudiosLib:CreateWindow("StudiosLib | Hub Universal")
 
 local T_Aim = MainUI:CreateTab("Principal")
-T_Aim:AddToggle("Ativar Mira (Aimbot)", false, function(s) ProfileSettings.Aim.Active = s end)
-T_Aim:AddToggle("Verificar Time", true, function(s) ProfileSettings.Aim.CheckTeam = s end)
-T_Aim:AddToggle("Verificar Parede", true, function(s) ProfileSettings.Aim.CheckWall = s end)
-T_Aim:AddSlider("Suavização", 1, 20, 5, function(v) ProfileSettings.Aim.Smooth = v end)
+T_Aim:AddToggle("Ativar Mira (Aimbot)", false, "Aim_Active", function(s) ProfileSettings.Aim.Active = s end)
+T_Aim:AddToggle("Verificar Time", true, "Aim_Team", function(s) ProfileSettings.Aim.CheckTeam = s end)
+T_Aim:AddToggle("Verificar Parede", true, "Aim_Wall", function(s) ProfileSettings.Aim.CheckWall = s end)
+T_Aim:AddSlider("Suavização", 1, 20, 5, "Aim_Smooth", function(v) ProfileSettings.Aim.Smooth = v end)
 T_Aim:AddLabel("--- Avançado ---")
-T_Aim:AddToggle("Predição", false, function(s) ProfileSettings.Aim.Predict = s end)
-T_Aim:AddSlider("Fator de Predição", 1, 30, 16, function(v) ProfileSettings.Aim.PredictValue = v / 100 end)
-T_Aim:AddToggle("Travar Alvo (Sticky)", false, function(s) ProfileSettings.Aim.Sticky = s end)
+T_Aim:AddToggle("Predição", false, "Aim_Predict", function(s) ProfileSettings.Aim.Predict = s end)
+T_Aim:AddSlider("Fator de Predição", 1, 30, 16, "Aim_PredictFactor", function(v) ProfileSettings.Aim.PredictValue = v / 100 end)
+T_Aim:AddToggle("Travar Alvo (Sticky)", false, "Aim_Sticky", function(s) ProfileSettings.Aim.Sticky = s end)
 
 local T_Vis = MainUI:CreateTab("Visuais")
-T_Vis:AddToggle("Ativar ESP", false, function(s) ProfileSettings.Visuals.Active = s end)
-T_Vis:AddToggle("Caixas (Boxes)", false, function(s) ProfileSettings.Visuals.Box = s end)
-T_Vis:AddToggle("Nomes", false, function(s) ProfileSettings.Visuals.Label = s end)
-T_Vis:AddToggle("Distância", false, function(s) ProfileSettings.Visuals.Dist = s end)
-T_Vis:AddToggle("Linhas (Tracers)", false, function(s) ProfileSettings.Visuals.Line = s end)
-T_Vis:AddToggle("Ignorar Aliados", true, function(s) ProfileSettings.Visuals.Team = s end)
+T_Vis:AddToggle("Ativar ESP", false, "ESP_Active", function(s) ProfileSettings.Visuals.Active = s end)
+T_Vis:AddToggle("Caixas (Boxes)", false, "ESP_Box", function(s) ProfileSettings.Visuals.Box = s end)
+T_Vis:AddToggle("Nomes", false, "ESP_Name", function(s) ProfileSettings.Visuals.Label = s end)
+T_Vis:AddToggle("Distância", false, "ESP_Dist", function(s) ProfileSettings.Visuals.Dist = s end)
+T_Vis:AddToggle("Linhas (Tracers)", false, "ESP_Line", function(s) ProfileSettings.Visuals.Line = s end)
+T_Vis:AddToggle("Ignorar Aliados", true, "ESP_IgnoreTeam", function(s) ProfileSettings.Visuals.Team = s end)
 T_Vis:AddLabel("--- Aparência ---")
-T_Vis:AddToggle("Usar Cor do Time", false, function(s) ProfileSettings.Visuals.TeamColorMode = s end)
-T_Vis:AddToggle("Modo Arco-Íris", false, function(s) ProfileSettings.Visuals.RainbowMode = s end)
+T_Vis:AddToggle("Usar Cor do Time", false, "ESP_TeamColor", function(s) ProfileSettings.Visuals.TeamColorMode = s end)
+T_Vis:AddToggle("Modo Arco-Íris", false, "ESP_Rainbow", function(s) ProfileSettings.Visuals.RainbowMode = s end)
 
 local T_Scope = MainUI:CreateTab("FOV")
-T_Scope:AddToggle("Mostrar Círculo", true, function(s) ProfileSettings.Aim.CircleShow = s end)
-T_Scope:AddSlider("Tamanho do Círculo", 50, 800, 100, function(v) ProfileSettings.Aim.CircleSize = v end)
+T_Scope:AddToggle("Mostrar Círculo", true, "FOV_Show", function(s) ProfileSettings.Aim.CircleShow = s end)
+T_Scope:AddSlider("Tamanho do Círculo", 50, 800, 100, "FOV_Size", function(v) ProfileSettings.Aim.CircleSize = v end)
 
 local T_Filters = MainUI:CreateTab("Ignorar Times")
 local TeamsS = game:GetService("Teams")
 for _, tm in pairs(TeamsS:GetTeams()) do
-    T_Filters:AddToggle(tm.Name, false, function(s)
+    T_Filters:AddToggle(tm.Name, false, "TeamFilter_" .. tm.Name, function(s)
         ProfileSettings.Aim.Blacklist[tm.Name] = s
     end)
 end
